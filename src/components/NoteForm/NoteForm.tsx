@@ -1,43 +1,57 @@
-import { Formik, Form, Field, ErrorMessage as FormikError } from 'formik';
-import * as Yup from 'yup';
-import css from './NoteForm.module.css';
-import type { NoteTag } from '../../types/note';
+import { Formik, Form, Field, ErrorMessage as FormikError } from "formik";
+import * as Yup from "yup";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { createNote } from "../../services/noteService";
+import type { NoteTag } from "../../types/note";
 
-const TAGS: NoteTag[] = ['Todo', 'Work', 'Personal', 'Meeting', 'Shopping'];
+import css from "./NoteForm.module.css";
+
+const TAGS: NoteTag[] = ["Todo", "Work", "Personal", "Meeting", "Shopping"];
 
 export interface NoteFormValues {
   title: string;
   content: string;
-  tag: NoteTag | '';
+  tag: NoteTag | "";
 }
 
 export interface NoteFormProps {
   onCancel: () => void;
-  onSubmit: (note: { title: string; content: string; tag: NoteTag }) => void;
-  submitting?: boolean;
 }
 
 const schema = Yup.object({
-  title: Yup.string().min(3).max(50).required('Title is required'),
-  content: Yup.string().max(500, 'Max 500 characters'),
+  title: Yup.string().min(3).max(50).required("Title is required"),
+  content: Yup.string().max(500, "Max 500 characters"),
   tag: Yup.mixed<NoteTag>()
-    .oneOf(TAGS as readonly NoteTag[], 'Choose a valid tag')
-    .required('Tag is required'),
+    .oneOf(TAGS as readonly NoteTag[], "Choose a valid tag")
+    .required("Tag is required"),
 });
 
-export default function NoteForm({ onCancel, onSubmit, submitting }: NoteFormProps) {
-  const initialValues: NoteFormValues = { title: '', content: '', tag: '' };
+export default function NoteForm({ onCancel }: NoteFormProps) {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: createNote,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notes"] }); 
+      onCancel(); 
+    },
+  });
+
+  const initialValues: NoteFormValues = { title: "", content: "", tag: "" };
 
   return (
     <Formik
       initialValues={initialValues}
       validationSchema={schema}
-      onSubmit={(values, helpers) => {
-        onSubmit({ title: values.title, content: values.content, tag: values.tag as NoteTag });
-        helpers.setSubmitting(false);
+      onSubmit={(values) => {
+        mutation.mutate({
+          title: values.title,
+          content: values.content,
+          tag: values.tag as NoteTag,
+        });
       }}
     >
-      {({ isSubmitting, isValid }) => (
+      {({ isValid }) => (
         <Form className={css.form}>
           <div className={css.formGroup}>
             <label htmlFor="title">Title</label>
@@ -47,7 +61,13 @@ export default function NoteForm({ onCancel, onSubmit, submitting }: NoteFormPro
 
           <div className={css.formGroup}>
             <label htmlFor="content">Content</label>
-            <Field as="textarea" id="content" name="content" rows={8} className={css.textarea} />
+            <Field
+              as="textarea"
+              id="content"
+              name="content"
+              rows={8}
+              className={css.textarea}
+            />
             <FormikError name="content" component="span" className={css.error} />
           </div>
 
@@ -65,15 +85,19 @@ export default function NoteForm({ onCancel, onSubmit, submitting }: NoteFormPro
           </div>
 
           <div className={css.actions}>
-            <button type="button" className={css.cancelButton} onClick={onCancel}>
+            <button
+              type="button"
+              className={css.cancelButton}
+              onClick={onCancel}
+            >
               Cancel
             </button>
             <button
               type="submit"
               className={css.submitButton}
-              disabled={!!submitting || isSubmitting || !isValid}
+              disabled={mutation.isPending || !isValid}
             >
-              Create note
+              {mutation.isPending ? "Creating..." : "Create note"}
             </button>
           </div>
         </Form>
